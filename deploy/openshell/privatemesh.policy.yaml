@@ -1,0 +1,132 @@
+# PrivateMesh, running under NVIDIA OpenShell (github.com/NVIDIA/OpenShell) — a real, `--live`
+# run: an owner's data directory, an owner's Google connection, real search evidence.
+#
+# Schema read from OpenShell's own examples (not invented): `examples/sandbox-policy-quickstart/
+# policy.yaml`, `crates/openshell-driver-mxc/examples/e2e-policies/network-reject.yaml`, and the
+# `deploy/man/openshell.1.md` reference for `sandbox create --policy FILE`, and the L7 `rules`
+# schema from docs.nvidia.com/openshell/reference/policy-schema. RUN on OpenShell 0.0.116 on
+# 2026-09-21 — the red-team corpus held 9/9 in all three modes inside it, and what the run found
+# is recorded in `docs/NVIDIA_STACK.md`, "What running it found".
+#
+# Least privilege, stated plainly: filesystem access is read-write ONLY where PrivateMesh's own
+# data directory and the owner's Google token live; every other path OpenShell mounts by default
+# stays read-only; network access is exactly the METHOD + PATH pairs the adapters call, and
+# nothing else — no package registry, no arbitrary host, and on an allowed host no path the
+# product does not use. The first version granted whole hosts with `access: read-only`, and the
+# run showed that preset DENYING `POST /token` and `POST /search` at OpenShell's L7 layer: under it
+# the product could never refresh its Google token or run a venue search. Every rule below is read
+# off the adapter source it names, so a new call the code makes is a policy change someone sees.
+
+version: 1
+
+filesystem_policy:
+  # FALSE, deliberately. `include_workdir: true` would mount the actual host checkout this was
+  # invoked from into the sandbox — not the tracked sources `scripts/openshell_run.sh` archives
+  # with `git archive HEAD`, the real working tree, untracked files included: a root `.env`,
+  # anything under `secrets/`, the lot. The script never needs that: it builds its own archive of
+  # exactly `${ARCHIVE_PATHS[@]}` from `git archive` (which cannot see an untracked file at all)
+  # and puts it in the sandbox itself with `sandbox upload` — that upload, not the workdir, is why
+  # `scripts/openshell_run.sh` never passes `--upload` to `sandbox create`. `include_workdir: true`
+  # here would have been a second, uninspected way for host files to enter the sandbox, wide open
+  # beside the first one the script actually checks.
+  include_workdir: false
+  read_only: [/usr, /lib, /proc, /dev/urandom, /app, /etc, /var/log]
+  read_write:
+    # OpenShell REFUSES relative and `~` paths ("path must be absolute (start with '/')") — the
+    # first version of this file said `data/v2` and `~/.privatemesh` and was rejected at
+    # `sandbox create`, which a text-level test could never have caught. Inside the sandbox the
+    # workdir is `/sandbox` and it is the sandbox user's HOME, so both of PrivateMesh's writable
+    # locations live under it: `/sandbox/privatemesh/data/v2` (`wiring.build_live`'s data
+    # directory: library, boundary, facts, changes, changesets, audit, digests, limits,
+    # agreements, routine) and `/sandbox/.privatemesh` (the owner token, 0600).
+    - /sandbox
+    - /tmp
+    - /dev/null
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+network_policies:
+  # The model. `llm.TokenFactory` posts to `chat/completions` under the configured base URL and
+  # calls nothing else — not `/v1/models`, which the run showed this rule refusing.
+  nebius_token_factory:
+    name: nebius-token-factory
+    endpoints:
+      - host: api.tokenfactory.nebius.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: /v1/chat/completions }
+    binaries:
+      - { path: /usr/bin/python3 }
+
+  # Gmail (`gmail.GmailClient`, base `/gmail/v1/users/me`). The five calls it makes: labels,
+  # message list, one message, one thread, send. THIS IS THE RULE THE PRODUCT EXISTS BECAUSE OF:
+  # `POST .../messages/send` must be allowed for the assistant to do its job, and the recipient of
+  # a send lives inside a base64url RFC 822 body that no method/path/query rule can read. OpenShell
+  # is right to permit this request; deciding WHICH send is the owner's is PrivateMesh's job.
+  google_gmail:
+    name: google-gmail
+    endpoints:
+      - host: gmail.googleapis.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: /gmail/v1/users/me/labels }
+          - allow: { method: GET, path: /gmail/v1/users/me/messages }
+          - allow: { method: GET, path: "/gmail/v1/users/me/messages/*" }
+          - allow: { method: GET, path: "/gmail/v1/users/me/threads/*" }
+          - allow: { method: POST, path: /gmail/v1/users/me/messages/send }
+    binaries:
+      - { path: /usr/bin/python3 }
+
+  # Calendar (`gcal.GCalClient`, base `/calendar/v3`): list and read events, move one event, and
+  # the free/busy query at the API root.
+  google_calendar:
+    name: google-calendar
+    endpoints:
+      - host: www.googleapis.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/calendar/v3/calendars/*/events" }
+          - allow: { method: GET, path: "/calendar/v3/calendars/*/events/*" }
+          - allow: { method: PATCH, path: "/calendar/v3/calendars/*/events/*" }
+          - allow: { method: POST, path: /calendar/v3/freeBusy }
+    binaries:
+      - { path: /usr/bin/python3 }
+
+  # Token refresh (`google_auth.GOOGLE_TOKEN_URL`). `accounts.google.com` is deliberately absent:
+  # the consent screen is opened by the owner's BROWSER on the host during `privatemesh auth`, and
+  # the server inside the sandbox never calls it.
+  google_oauth:
+    name: google-oauth
+    endpoints:
+      - host: oauth2.googleapis.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: /token }
+    binaries:
+      - { path: /usr/bin/python3 }
+
+  # Venue research (`skills_builtin.TAVILY_URL`, `tavily_evidence.TAVILY_URL`).
+  tavily_search:
+    name: tavily-search
+    endpoints:
+      - host: api.tavily.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: /search }
+    binaries:
+      - { path: /usr/bin/python3 }

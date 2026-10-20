@@ -1,0 +1,96 @@
+# The public demo: api + web + Caddy. Run from the repository root:
+#   docker compose -f deploy/demo/compose.yaml build
+#   docker compose -f deploy/demo/compose.yaml up -d
+# See docs/DEPLOY.md for the full runbook (VM provisioning, secret handling, spend checks, rotation).
+#
+# The model key is NEVER in this file, in `demo.env`, or in any image: it is a docker secret backed
+# by a host file (`PM_NEBIUS_API_KEY_FILE`, default `./secrets/nebius_api_key`) that `entrypoint.sh`
+# reads at container start. `TAVILY_API_KEY` and any Google credential must stay absent from this
+# whole host — `demo_session.refuse_if_providers_configured` refuses to start the process if either
+# is found, by design (see README.md, "It refuses to start beside a real credential").
+
+secrets:
+  nebius_api_key:
+    file: ${PM_NEBIUS_API_KEY_FILE:-./secrets/nebius_api_key}
+
+volumes:
+  # The whole-demo spend ledger (`PM_DEMO_LEDGER`, default `~/.privatemesh/demo-spend.db` under this
+  # container's HOME) — the one thing demo mode persists; every per-session store is `:memory:`
+  # (`wiring.build_demo_world`). A NAMED volume with no external seed, so it is EMPTY — the ledger
+  # starts at $0 — the first time this compose project boots, and simply survives restarts after
+  # that so the whole-demo total/daily caps hold across them.
+  demo_ledger:
+  caddy_data:
+  caddy_config:
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/demo/Dockerfile
+    image: privatemesh-demo-api
+    env_file:
+      - demo.env
+    environment:
+      NEBIUS_API_KEY_FILE: /run/secrets/nebius_api_key
+      PM_DEMO_LEDGER: /home/privatemesh/.privatemesh/demo-spend.db
+    secrets:
+      - nebius_api_key
+    volumes:
+      - demo_ledger:/home/privatemesh/.privatemesh
+    ports:
+      - "${PM_API_PORT:-8765}:8765"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request as u; u.urlopen('http://127.0.0.1:8765/health', timeout=2).read()"]
+      interval: 15s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    # Bounded, not infinite: a missing/invalid key or a stray provider credential makes this exit 1
+    # on purpose (see Dockerfile), and that is a configuration fact for an operator to read in the
+    # logs, not a condition to hammer against forever. `unless-stopped` on a service that can refuse
+    # to start by design would be an unbounded restart loop; three tries and stop is not.
+    restart: on-failure:3
+
+  web:
+    # A Next.js Node server (`next build` && `next start`), built with NEXT_PUBLIC_API_MODE=demo —
+    # see web.Dockerfile. The root page is the live demo (`components/DemoApp.tsx`); the sample
+    # workspace (no model) stays at /tour. `lib/demo-api.ts` calls `/v2/demo/*` same-origin, which
+    # Caddy (see Caddyfile) routes to the `api` service above — no NEXT_PUBLIC_API_BASE_URL needed.
+    build:
+      context: ../..
+      dockerfile: deploy/demo/web.Dockerfile
+    image: privatemesh-demo-web
+    ports:
+      - "${PM_WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - api
+      - web
+    environment:
+      PM_DEMO_DOMAIN: ${PM_DEMO_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "${PM_CADDY_HTTP_PORT:-80}:80"
+      - "${PM_CADDY_HTTPS_PORT:-443}:443"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    restart: unless-stopped

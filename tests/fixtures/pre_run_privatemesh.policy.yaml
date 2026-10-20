@@ -1,0 +1,109 @@
+# PrivateMesh, running under NVIDIA OpenShell (github.com/NVIDIA/OpenShell) — a real, `--live`
+# run: an owner's data directory, an owner's Google connection, real search evidence.
+#
+# Schema read from OpenShell's own examples (not invented): `examples/sandbox-policy-quickstart/
+# policy.yaml`, `crates/openshell-driver-mxc/examples/e2e-policies/network-reject.yaml`, and the
+# `deploy/man/openshell.1.md` reference for `sandbox create --policy FILE`. This file has not been
+# run — no OpenShell install is on this machine and none was made to build it (see
+# `docs/NVIDIA_STACK.md`, "What we have not run").
+#
+# Least privilege, stated plainly: filesystem access is read-write ONLY where PrivateMesh's own
+# data directory and the owner's Google token live; every other path OpenShell mounts by default
+# stays read-only; network access is exactly the four endpoint groups the product calls, and
+# nothing else — no shell, no package registry, no arbitrary host.
+
+version: 1
+
+filesystem_policy:
+  # `include_workdir: true` is what makes `openshell sandbox create --policy this-file -- ...`,
+  # run from the repository root, see the checkout it was invoked from — the same convention
+  # `examples/sandbox-policy-quickstart/policy.yaml` uses, and the whole reason `scripts/
+  # openshell_run.sh` does not also need `--upload`.
+  include_workdir: true
+  read_only: [/usr, /lib, /proc, /dev/urandom, /app, /etc, /var/log]
+  read_write:
+    # `wiring.build_live`'s default data directory: library.db (the taught-skill library),
+    # boundary.db (the protected commitment), facts.db (care facts), changes.db/changesets.db,
+    # audit.db, digests.db, limits.db, agreements.db, routine.db.
+    - data/v2
+    # The owner token `serve --v2 --live --owner-session` mints (`owner_token.path()`,
+    # `~/.privatemesh/owner.token`, 0600). Every owner-only route needs it as a bearer credential.
+    - ~/.privatemesh
+    - /tmp
+    - /dev/null
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+network_policies:
+  # Nebius Token Factory — every model call (`llm.TokenFactory`, `config.Settings.base_url`'s
+  # default). Read-write because a chat completion is a POST.
+  nebius_token_factory:
+    name: nebius-token-factory
+    endpoints:
+      - host: api.tokenfactory.nebius.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-write
+    binaries:
+      - { path: /usr/bin/python3 }
+
+  # Gmail — reading the owner's inbox and sending an approved reply (`gmail.py`).
+  google_gmail:
+    name: google-gmail
+    endpoints:
+      - host: gmail.googleapis.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-write
+    binaries:
+      - { path: /usr/bin/python3 }
+
+  # Calendar v3 — reading busy/free and moving an approved invite (`gcal.py`).
+  google_calendar:
+    name: google-calendar
+    endpoints:
+      - host: www.googleapis.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-write
+    binaries:
+      - { path: /usr/bin/python3 }
+
+  # OAuth token refresh and the initial consent flow (`google_auth.py`). Read-only: this endpoint
+  # group never receives the owner's mail or calendar data, only credential exchange.
+  google_oauth:
+    name: google-oauth
+    endpoints:
+      - host: oauth2.googleapis.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-only
+      - host: accounts.google.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-only
+    binaries:
+      - { path: /usr/bin/python3 }
+
+  # Tavily — venue/evidence search for a proposed meeting (`tavily_evidence.py`). Read-only: this
+  # product never writes to Tavily, only queries it.
+  tavily_search:
+    name: tavily-search
+    endpoints:
+      - host: api.tavily.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-only
+    binaries:
+      - { path: /usr/bin/python3 }

@@ -1,0 +1,9 @@
+node_modules
+.next
+.shots
+.shots-live
+test-results
+playwright-report
+e2e
+e2e-live
+.env.local

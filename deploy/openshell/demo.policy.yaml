@@ -1,0 +1,51 @@
+# PrivateMesh's public demo (`serve --v2 --demo`), under NVIDIA OpenShell — this file IS the
+# demo's claim, expressed as policy rather than as prose: the model call is real, and the inbox,
+# the calendar and web search are `SimMail`/`SimCalendar`/`SimSearch` (`sim.py`) — there is no
+# Google or Tavily credential in this process, and `wiring.build_demo` refuses to start beside one
+# (`wiring.DemoRefused`). A policy that allowed those endpoints would be a policy that could be
+# wrong about what the demo is; this one cannot, because the one host it grants is the model's, and only for the one call the model client makes.
+#
+# Same schema sources as `privatemesh.policy.yaml` (see that file's header). RUN on OpenShell
+# 0.0.116 on 2026-09-21 — the red-team corpus held 9/9 in all three modes inside it, and the
+# egress probe measured this file granting exactly what this comment claims and nothing else. See
+# `docs/NVIDIA_STACK.md`, "What running it found".
+
+version: 1
+
+filesystem_policy:
+  # FALSE — see `privatemesh.policy.yaml`'s own comment on this key. The demo is built from the
+  # same `scripts/openshell_run.sh` upload flow, never from the host checkout directly.
+  include_workdir: false
+  read_only: [/usr, /lib, /proc, /dev/urandom, /app, /etc, /var/log]
+  read_write:
+    # Absolute paths only — OpenShell refuses anything else. A public demo process opens NO store
+    # of its own (every visitor's world is `:memory:`, pm-demo-r3), so the only writable places
+    # are the workdir it was uploaded to and the scratch every Python process needs.
+    - /sandbox
+    - /tmp
+    - /dev/null
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+network_policies:
+  # The ONLY network access the public demo needs: the model endpoint. No Google, no Tavily — the
+  # demo's inbox, calendar and web search are simulated, so there is nothing real for those
+  # endpoints to do, and granting them would be a policy claiming a capability the process does not
+  # have and will not use.
+  nebius_token_factory:
+    name: nebius-token-factory
+    endpoints:
+      - host: api.tokenfactory.nebius.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        # The one call the model client makes; the run showed a path-level rule is enforced.
+        rules:
+          - allow: { method: POST, path: /v1/chat/completions }
+    binaries:
+      - { path: /usr/bin/python3 }

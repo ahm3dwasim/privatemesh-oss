@@ -1,0 +1,32 @@
+# Reverse proxy for the PrivateMesh public demo. Automatic HTTPS is Caddy's default behaviour for
+# any real hostname: give it one in `PM_DEMO_DOMAIN` (compose.yaml passes it through) and, on a box
+# reachable on 80/443 with public DNS pointed at it, Caddy requests and renews a Let's Encrypt
+# certificate with no further configuration — see https://caddyserver.com/docs/automatic-https.
+#
+# `PM_DEMO_DOMAIN` defaults to `localhost` for local testing (`docs/DEPLOY.md`'s proof run): Caddy
+# treats `localhost` as a non-public name and serves it over TLS from its own internal CA instead of
+# attempting ACME, which is what makes `docker compose build && up` produce a working HTTPS
+# endpoint on a laptop with no domain and no internet-facing port 80/443.
+{$PM_DEMO_DOMAIN:localhost} {
+	encode gzip
+
+	# The live-demo landing (`/`, `components/DemoApp.tsx`) calls `POST /v2/demo/session` and its
+	# siblings same-origin (`web/lib/demo-api.ts`, `NEXT_PUBLIC_API_BASE_URL` left unset in
+	# web.Dockerfile) — the api container mounts those routes at `/v2/demo/*` directly (no `/api`
+	# prefix, `api.py`'s `mount_v1=False` build), so this proxies the path unchanged.
+	handle /v2/* {
+		reverse_proxy api:8765
+	}
+
+	# The same API, reachable directly for a judge or a script per docs/API_V2.md (`/api/health`,
+	# `/api/docs`, `/api/v2/demo/*`). `handle_path` strips the `/api` prefix.
+	handle_path /api/* {
+		reverse_proxy api:8765
+	}
+
+	# Everything else — the live-demo landing and the sample workspace at `/tour` — is the web app
+	# (see web.Dockerfile: a Next.js Node server built with NEXT_PUBLIC_API_MODE=demo).
+	handle {
+		reverse_proxy web:3000
+	}
+}
