@@ -1,4 +1,4 @@
-# Ported from the author's prior private assistant (Jarvis); adapted for PrivateMesh.
+# Ported from the author's earlier private assistant; adapted for PrivateMesh.
 """Long-term memory: typed rows in SQLite, FTS5 recall, bi-temporal validity, owner consent.
 
 The patterns ported from the prior assistant (its M8 memory layer), minus the notes-table

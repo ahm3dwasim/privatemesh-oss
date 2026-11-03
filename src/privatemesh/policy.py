@@ -1,4 +1,4 @@
-# Ported from the author's prior private assistant (Jarvis); adapted for PrivateMesh.
+# Ported from the author's earlier private assistant; adapted for PrivateMesh.
 """The policy engine — this repo's authority layer, and it is deterministic code, never a model.
 
 Ported from the prior assistant's `kernel/policy.py` (the decision table and `PolicyResult`),

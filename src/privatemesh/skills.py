@@ -1,4 +1,4 @@
-# Ported from the author's prior private assistant (Jarvis); adapted for PrivateMesh.
+# Ported from the author's earlier private assistant; adapted for PrivateMesh.
 """The skill contract — what every skill declares, and the registry that holds them.
 
 Ported from the prior assistant's `tools/types.py` (the `Risk` ladder, `ToolResult`, and the

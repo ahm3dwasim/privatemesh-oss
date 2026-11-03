@@ -1,4 +1,4 @@
-# Ported from the author's prior private assistant (Jarvis); adapted for PrivateMesh.
+# Ported from the author's earlier private assistant; adapted for PrivateMesh.
 """Approval — turning a NEEDS_APPROVAL policy decision into a human yes/no, exactly once.
 
 Ported from the prior assistant's `kernel/approval.py`: approval is per-action and specific —

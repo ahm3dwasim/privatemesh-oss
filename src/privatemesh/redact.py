@@ -1,4 +1,4 @@
-# Ported from the author's prior private assistant (Jarvis); adapted for PrivateMesh.
+# Ported from the author's earlier private assistant; adapted for PrivateMesh.
 """Secret hygiene: which paths/commands are sensitive, and a small value redactor.
 
 Lifted (deliberately narrowly) from the prior assistant's 1,632-line guards module: the

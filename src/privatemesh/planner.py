@@ -1,4 +1,4 @@
-# Ported from the author's prior private assistant (Jarvis); adapted for PrivateMesh.
+# Ported from the author's earlier private assistant; adapted for PrivateMesh.
 """The planning and execution loop: goal -> ordered steps -> validated -> approved -> executed.
 
 Ported from the prior assistant's `kernel/planner.py`. The design carried over intact:

@@ -1,4 +1,4 @@
-# Ported from the author's prior private assistant (Jarvis); adapted for PrivateMesh.
+# Ported from the author's earlier private assistant; adapted for PrivateMesh.
 """The audit trail — an append-only, hash-chained store, and the receipt the product promises.
 
 Ported from the prior assistant's `kernel/audit.py`: the `PolicyRecord` shape (who / which tool /

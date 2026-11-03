@@ -1,4 +1,4 @@
-# Ported from the author's prior private assistant (Jarvis); adapted for PrivateMesh.
+# Ported from the author's earlier private assistant; adapted for PrivateMesh.
 """Verification + typed failure classification: "never assume success."
 
 Ported from the prior assistant's `kernel/verify.py` essentially unchanged — it is pure, has no
