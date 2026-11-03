@@ -24,8 +24,7 @@ A first-run path — connect or use the sample, pick a limit preset, teach a rul
 only while there is no history at all.
 
 Next.js App Router, strict TypeScript, Vitest, Playwright. Design tokens, the type scale and both
-themes live in `app/globals.css`; `DESIGN-REPORT.md` at the repo root records the design decisions
-and the critique round behind them.
+themes live in `app/globals.css`.
 
 ## Run the isolated sample
 

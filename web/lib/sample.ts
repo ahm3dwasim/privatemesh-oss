@@ -547,8 +547,8 @@ export function createSampleAdapter(initialVariant: SampleVariant = 'happy'): Ap
     // preparation (`installedExpiry` stays 0 until the owner installs one themselves): its narrowing
     // is the real one it already produced on `podiatry-review`, two days ago, not an invented one.
     // Wiring it into the live change too would give every other sample scenario a THIRD rejected
-    // option out of nowhere, which is a bigger change than this lane's remaining scope affords —
-    // recorded in DESIGN-REPORT.md as a deliberate limit, not an oversight.
+    // option out of nowhere, which is a bigger change than it is worth here — a deliberate limit,
+    // not an oversight.
     library = [{ name: 'Afternoon rule', purpose_plain: 'Keep only offered times that satisfy your rule.', version: 1, identity: SEEDED_SKILL_IDENTITY, state: 'active', learned_at: day(2, '16:00'), last_used_at: day(2, '16:10'), uses: 1, rule: 'No appointments after 15:30 on Wednesdays' }];
     installedLearnings.clear(); installedExpiry = 0;
     variant = next;
